@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Registro de Glucosa</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-1024.png">
+<meta name="theme-color" content="#3498db">
+<style>
+body{font-family:Arial;background:#f4f6f8;padding:12px}
+h1{text-align:center}
+form,table{background:#fff;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.1)}
+form{padding:12px;margin-bottom:20px}
+label{font-weight:bold;font-size:14px;margin-top:8px;display:block}
+input,select,textarea{width:100%;padding:6px;font-size:14px;border-radius:6px;border:1px solid #ccc;margin-top:4px}
+textarea{resize:none}
+button{width:100%;background:#3498db;color:#fff;font-size:16px;padding:10px;border:none;border-radius:8px;margin-top:10px}
+.btnFecha{background:#2ecc71;font-size:13px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:8px;text-align:center;border-bottom:1px solid #ddd}
+th{background:#ecf0f1}
+.verde{background:#d4edda}.amarillo{background:#fff3cd}.rojo{background:#f8d7da}
+.glucosa{font-size:20px;font-weight:bold}
+.borrar{background:#e74c3c;color:#fff;border:none;padding:5px 8px;border-radius:5px}
+</style>
+</head>
+<body>
+<h1>📊 Registro de Glucosa</h1>
+<form id="formRegistro">
+<label>Glucosa (mg/dL)</label><input type="number" id="glucosa" required>
+<label>Fecha</label><input type="date" id="fecha" required>
+<button type="button" class="btnFecha" onclick="fechaHoy()">Usar fecha de hoy</button>
+<label>Hora</label><input type="time" id="hora" required>
+<button type="button" class="btnFecha" onclick="horaActual()">Usar hora actual</button>
+<label>Dosis de insulina (UI)</label><input type="number" id="insulina" step="0.1">
+<label>Tipo de insulina</label>
+<select id="tipoInsulina"><option value="">-- Seleccionar --</option><option>Rápida</option><option>Intermedia</option><option>Lenta</option><option>Mixta</option></select>
+<label>¿Qué comiste?</label><textarea id="comida" rows="2"></textarea>
+<label>Observaciones</label><textarea id="observaciones" rows="2"></textarea>
+<button type="submit">Guardar registro</button>
+</form>
+<table>
+<thead><tr><th>Fecha</th><th>Hora</th><th>Glucosa</th><th>Insulina</th><th>Tipo</th><th>Comida</th><th>Obs.</th><th></th></tr></thead>
+<tbody id="tabla"></tbody>
+</table>
+<script>
+let registros = JSON.parse(localStorage.getItem("registrosGlucosa")) || [];
+function icono(v){if(v>=70&&v<=140)return"🟢";if((v>=141&&v<=180)||(v>=60&&v<70))return"🟡";return"🔴"}
+function color(v){if(v>=70&&v<=140)return"verde";if((v>=141&&v<=180)||(v>=60&&v<70))return"amarillo";return"rojo"}
+function fechaHoy(){fecha.value=new Date().toISOString().split("T")[0]}
+function horaActual(){const d=new Date();hora.value=String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0")}
+function mostrar(){
+tabla.innerHTML="";
+registros.forEach((r,i)=>{
+tabla.innerHTML+=`<tr class="${color(r.glucosa)}">
+<td>${r.fecha}</td><td>${r.hora}</td>
+<td class="glucosa">${icono(r.glucosa)} ${r.glucosa}</td>
+<td>${r.insulina||""}</td><td>${r.tipo||""}</td>
+<td>${r.comida||""}</td><td>${r.obs||""}</td>
+<td><button class="borrar" onclick="borrar(${i})">X</button></td></tr>`})}
+function borrar(i){registros.splice(i,1);localStorage.setItem("registrosGlucosa",JSON.stringify(registros));mostrar()}
+formRegistro.addEventListener("submit",e=>{
+e.preventDefault();
+registros.push({glucosa:parseInt(glucosa.value),fecha:fecha.value,hora:hora.value,insulina:insulina.value,tipo:tipoInsulina.value,comida:comida.value,obs:observaciones.value});
+localStorage.setItem("registrosGlucosa",JSON.stringify(registros));
+e.target.reset();mostrar()});
+mostrar();
+</script>
+</body></html>
