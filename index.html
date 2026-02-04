@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Registro de Glucosa</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-1024.png">
+<meta name="theme-color" content="#3498db">
+<style>
+  body{font-family:Arial, system-ui, -apple-system;background:#f4f6f8;padding:12px}
+  h1{text-align:center}
+  form,table,.card{background:#fff;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.1)}
+  form{padding:12px;margin-bottom:20px}
+  label{font-weight:bold;font-size:14px;margin-top:8px;display:block}
+  input,select,textarea{width:100%;padding:6px;font-size:14px;border-radius:6px;border:1px solid #ccc;margin-top:4px}
+  textarea{resize:none}
+  button{width:100%;background:#3498db;color:#fff;font-size:16px;padding:10px;border:none;border-radius:8px;margin-top:10px;cursor:pointer}
+  .btnFecha{background:#2ecc71;font-size:13px}
+  table{width:100%;border-collapse:collapse;font-size:13px;overflow:hidden}
+  th,td{padding:8px;text-align:center;border-bottom:1px solid #ddd}
+  th{background:#ecf0f1}
+  .verde{background:#d4edda}.amarillo{background:#fff3cd}.rojo{background:#f8d7da}
+  .glucosa{font-size:20px;font-weight:bold}
+  .borrar{background:#e74c3c;color:#fff;border:none;padding:5px 8px;border-radius:5px;cursor:pointer}
+  .card{padding:12px;margin:16px 0}
+  .chart-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;flex-wrap:wrap}
+  .legend{font-size:12px;color:#555}
+  .legend span{display:inline-flex;align-items:center;margin-right:12px}
+  .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:middle}
+  /* Hacer los canvas fluidos sin perder la relación de aspecto */
+  .canvas-wrap{position:relative;width:100%;max-width:900px;margin:0 auto}
+  canvas{width:100%;height:auto;display:block}
+</style>
+</head>
+<body>
+<h1>📊 Registro de Glucosa</h1>
+
+<form id="formRegistro">
+  <label>Glucosa (mg/dL)</label><input type="number" id="glucosa" required>
+  <label>Fecha</label><input type="date" id="fecha" required>
+  <button type="button" class="btnFecha" onclick="fechaHoy()">Usar fecha de hoy</button>
+  <label>Hora</label><input type="time" id="hora" required>
+  <button type="button" class="btnFecha" onclick="horaActual()">Usar hora actual</button>
+  <label>Dosis de insulina (UI)</label><input type="number" id="insulina" step="0.1">
+  <label>Tipo de insulina</label>
+  <select id="tipoInsulina">
+    <option value="">-- Seleccionar --</option>
+    <option>Rápida</option>
+    <option>Intermedia</option>
+    <option>Lenta</option>
+    <option>Mixta</option>
+  </select>
+  <label>¿Qué comiste?</label><textarea id="comida" rows="2"></textarea>
+  <label>Observaciones</label><textarea id="observaciones" rows="2"></textarea>
+  <button type="submit">Guardar registro</button>
+</form>
+
+<!-- Gráfica semanal -->
+<div class="card">
+  <div class="chart-header">
+    <strong>📈 Glucosa semanal (promedio por día)</strong>
+    <div class="legend">
+      <span><span class="dot" style="background:#27ae60"></span>70–140</span>
+      <span><span class="dot" style="background:#f1c40f"></span>60–69 / 141–180</span>
+      <span><span class="dot" style="background:#e74c3c"></span>&lt;60 / &gt;180</span>
+    </div>
+  </div>
+  <div class="canvas-wrap">
+    <canvas id="graficaSemana" width="900" height="300" aria-label="Gráfica semanal de glucosa" role="img"></canvas>
+  </div>
+</div>
+
+<!-- Gráfica anual por mes (Ene–Dic) -->
+<div class="card">
+  <div class="chart-header">
+    <strong>📆 Glucosa por mes (promedio mensual, Ene–Dic)</strong>
+    <div class="legend">
+      <span><span class="dot" style="background:#27ae60"></span>70–140</span>
+      <span><span class="dot" style="background:#f1c40f"></span>60–69 / 141–180</span>
+      <span><span class="dot" style="background:#e74c3c"></span>&lt;60 / &gt;180</span>
+    </div>
+  </div>
+  <div class="canvas-wrap">
+    <canvas id="graficaMeses" width="900" height="320" aria-label="Gráfica por mes (promedio mensual)" role="img"></canvas>
+  </div>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th>Fecha</th><th>Hora</th><th>Glucosa</th><th>Insulina</th><th>Tipo</th><th>Comida</th><th>Obs.</th><th></th>
+    </tr>
+  </thead>
+  <tbody id="tabla"></tbody>
+</table>
+
+<script>
+let registros = JSON.parse(localStorage.getItem("registrosGlucosa")) || [];
+
+function icono(v){ if(v>=70&&v<=140)return"🟢"; if((v>=141&&v<=180)||(v>=60&&v<70))return"🟡"; return"🔴"; }
+function color(v){ if(v>=70&&v<=140)return"verde"; if((v>=141&&v<=180)||(v>=60&&v<70))return"amarillo"; return"rojo"; }
+
+function fechaHoy(){
+  // Ajuste para zona horaria: asegura YYYY-MM-DD correcto
+  const d = new Date(); d.setMinutes(d.getMinutes()-d.getTimezoneOffset());
+  fecha.value = d.toISOString().split("T")[0];
+}
+function horaActual(){
+  const d=new Date();
+  hora.value = String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");
+}
+
+function mostrar(){
+  const cuerpo = document.getElementById('tabla');
+  cuerpo.innerHTML="";
+  registros.forEach((r,i)=>{
+    cuerpo.innerHTML+=`<tr class="${color(r.glucosa)}">
+      <td>${r.fecha}</td><td>${r.hora}</td>
+      <td class="glucosa">${icono(r.glucosa)} ${r.glucosa}</td>
+      <td>${r.insulina||""}</td><td>${r.tipo||""}</td>
+      <td>${r.comida||""}</td><td>${r.obs||""}</td>
+      <td><button class="borrar" onclick="borrar(${i})">X</button></td>
+    </tr>`;
+  });
+  dibujarGraficaSemanal();
+  dibujarGraficaPorMeses();
+}
+
+function borrar(i){
+  registros.splice(i,1);
+  localStorage.setItem("registrosGlucosa",JSON.stringify(registros));
+  mostrar();
+}
+
+formRegistro.addEventListener("submit",e=>{
+  e.preventDefault();
+  registros.push({
+    glucosa: parseInt(glucosa.value,10),
+    fecha: fecha.value,
+    hora: hora.value,
+    insulina: insulina.value,
+    tipo: tipoInsulina.value,
+    comida: comida.value,
+    obs: observaciones.value
+  });
+  localStorage.setItem("registrosGlucosa",JSON.stringify(registros));
+  e.target.reset();
+  mostrar();
+});
+
+// ---------- Abreviaciones de día y mes en español ----------
+function diaCortoES(idx){ // 0=Dom, 1=Lun, ... 6=Sáb
+  const dias = ["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
+  return dias[idx];
+}
+function mesCortoES(idx){ // 0=Ene, ... 11=Dic
+  const meses = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+  return meses[idx];
+}
+
+// Utilidades comunes
+function promedio(nums){
+  if(!nums.length) return null;
+  return Math.round(nums.reduce((a,b)=>a+b,0)/nums.length);
+}
+
+function rangoFechaUltimos7(){
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+  const desde = new Date(hoy); desde.setDate(hoy.getDate()-6);
+  const pad = n => String(n).padStart(2,'0');
+  const aISO = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  return {desde, hoy, desdeISO:aISO(desde), hoyISO:aISO(hoy)};
+}
+
+// ====================== GRÁFICA SEMANAL ======================
+function dibujarGraficaSemanal(){
+  const canvas = document.getElementById('graficaSemana');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+
+  // Limpiar
+  ctx.clearRect(0,0,W,H);
+
+  // Márgenes y área de ploteo
+  const M = {l:48, r:16, t:16, b:50};
+  const plotW = W - M.l - M.r;
+  const plotH = H - M.t - M.b;
+
+  // Rango Y (mg/dL)
+  const Y_MIN = 40;
+  const Y_MAX = 260;
+
+  // utilidades de escala
+  const yToPx = v => M.t + (Y_MAX - v) * (plotH / (Y_MAX - Y_MIN));
+  const xToPx = idx => M.l + (idx) * (plotW / 6); // 7 días -> 0..6
+
+  // Fondo
+  ctx.fillStyle="#ffffff";
+  ctx.fillRect(0,0,W,H);
+
+  // Zonas de color
+  function fillBand(vTop,vBottom,color){
+    ctx.fillStyle = color;
+    ctx.fillRect(M.l, yToPx(vTop), plotW, yToPx(vBottom)-yToPx(vTop));
+  }
+  fillBand(180,260,"#fde2e0"); // rojo alto
+  fillBand(141,180,"#fff5d6"); // amarillo alto
+  fillBand(70,140,"#e7f5eb");  // verde
+  fillBand(60,69,"#fff5d6");   // amarillo bajo
+  fillBand(40,59,"#fde2e0");   // rojo bajo
+
+  // Ejes
+  ctx.strokeStyle="#9aa3ab";
+  ctx.lineWidth=1;
+  ctx.beginPath();
+  ctx.moveTo(M.l, M.t); ctx.lineTo(M.l, M.t+plotH);
+  ctx.moveTo(M.l, M.t+plotH); ctx.lineTo(M.l+plotW, M.t+plotH);
+  ctx.stroke();
+
+  // Grid y etiquetas Y
+  ctx.fillStyle="#2c3e50";
+  ctx.font="12px Arial";
+  const ticks = [60,70,100,140,180,220];
+  ctx.strokeStyle="#e1e5ea";
+  ticks.forEach(t=>{
+    const y = yToPx(t);
+    ctx.beginPath();
+    ctx.moveTo(M.l, y); ctx.lineTo(M.l+plotW, y);
+    ctx.stroke();
+    ctx.fillText(String(t), 8, y+4);
+  });
+
+  // Fechas y datos
+  const {desde, hoy, desdeISO, hoyISO} = rangoFechaUltimos7();
+
+  // agrupar por día (YYYY-MM-DD)
+  const mapa = {};
+  registros.forEach(r=>{
+    if(r.fecha >= desdeISO && r.fecha <= hoyISO){
+      if(!mapa[r.fecha]) mapa[r.fecha]=[];
+      mapa[r.fecha].push(Number(r.glucosa));
+    }
+  });
+
+  const dias = [];
+  for(let i=0;i<7;i++){
+    const d = new Date(desde); d.setDate(desde.getDate()+i);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth()+1).padStart(2,'0');
+    const dd = String(d.getDate()).padStart(2,'0');
+    const iso = `${yyyy}-${mm}-${dd}`;
+    // Etiqueta: "Mar-Feb"
+    const etiqueta = `${diaCortoES(d.getDay())}-${mesCortoES(d.getMonth())}`;
+    const vals = mapa[iso]||[];
+    dias.push({iso, etiqueta, avg: promedio(vals)});
+  }
+
+  // Etiquetas X (rotación ligera)
+  ctx.save();
+  ctx.fillStyle="#2c3e50";
+  ctx.textAlign="right";
+  dias.forEach((d, i)=>{
+    const x = xToPx(i);
+    const y = M.t+plotH+20;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(-Math.PI/6); // ~ -30°
+    ctx.fillText(d.etiqueta, 0, 0);
+    ctx.restore();
+  });
+  ctx.restore();
+
+  // Línea de datos
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  let tieneAlMenosUnPunto = false;
+  dias.forEach((d,i)=>{
+    if(d.avg!==null){
+      const x = xToPx(i);
+      const y = yToPx(d.avg);
+      if(!tieneAlMenosUnPunto){ ctx.moveTo(x,y); tieneAlMenosUnPunto=true; }
+      else ctx.lineTo(x,y);
+    }
+  });
+  ctx.strokeStyle="#2980b9";
+  ctx.stroke();
+
+  // Puntos y valores
+  dias.forEach((d,i)=>{
+    if(d.avg===null) return;
+    const x = xToPx(i);
+    const y = yToPx(d.avg);
+    let fill = "#e74c3c"; // rojo
+    if(d.avg>=70&&d.avg<=140) fill="#27ae60";
+    else if((d.avg>=60&&d.avg<70)||(d.avg>=141&&d.avg<=180)) fill="#f1c40f";
+
+    // halo
+    ctx.beginPath(); ctx.arc(x,y,5,0,Math.PI*2);
+    ctx.fillStyle="#ffffff"; ctx.fill();
+    // punto
+    ctx.beginPath(); ctx.arc(x,y,4,0,Math.PI*2);
+    ctx.fillStyle=fill; ctx.fill();
+
+    // valor
+    ctx.fillStyle="#34495e";
+    ctx.font="11px Arial";
+    ctx.textAlign="center";
+    ctx.fillText(d.avg+"", x, y-8);
+  });
+
+  if(!tieneAlMenosUnPunto){
+    ctx.fillStyle="#7f8c8d";
+    ctx.font="14px Arial";
+    ctx.textAlign="center";
+    ctx.fillText("Sin datos en los últimos 7 días", M.l + plotW/2, M.t + plotH/2);
+  }
+}
+
+// ====================== GRÁFICA POR MESES (Ene–Dic) ======================
+function dibujarGraficaPorMeses(){
+  const canvas = document.getElementById('graficaMeses');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+
+  ctx.clearRect(0,0,W,H);
+
+  const M = {l:48, r:16, t:16, b:50};
+  const plotW = W - M.l - M.r;
+  const plotH = H - M.t - M.b;
+
+  const Y_MIN = 40;
+  const Y_MAX = 260;
+  const yToPx = v => M.t + (Y_MAX - v) * (plotH / (Y_MAX - Y_MIN));
+  const xToPx = idx => M.l + (idx) * (plotW / 11); // 12 meses -> 0..11
+
+  // Fondo
+  ctx.fillStyle="#ffffff";
+  ctx.fillRect(0,0,W,H);
+
+  // Bandas por rangos
+  function fillBand(vTop,vBottom,color){
+    ctx.fillStyle = color;
+    ctx.fillRect(M.l, yToPx(vTop), plotW, yToPx(vBottom)-yToPx(vTop));
+  }
+  fillBand(180,260,"#fde2e0"); // rojo alto
+  fillBand(141,180,"#fff5d6"); // amarillo alto
+  fillBand(70,140,"#e7f5eb");  // verde
+  fillBand(60,69,"#fff5d6");   // amarillo bajo
+  fillBand(40,59,"#fde2e0");   // rojo bajo
+
+  // Ejes
+  ctx.strokeStyle="#9aa3ab";
+  ctx.lineWidth=1;
+  ctx.beginPath();
+  ctx.moveTo(M.l, M.t); ctx.lineTo(M.l, M.t+plotH);
+  ctx.moveTo(M.l, M.t+plotH); ctx.lineTo(M.l+plotW, M.t+plotH);
+  ctx.stroke();
+
+  // Grid Y
+  ctx.fillStyle="#2c3e50";
+  ctx.font="12px Arial";
+  const ticks = [60,70,100,140,180,220];
+  ctx.strokeStyle="#e1e5ea";
+  ticks.forEach(t=>{
+    const y = yToPx(t);
+    ctx.beginPath();
+    ctx.moveTo(M.l, y); ctx.lineTo(M.l+plotW, y);
+    ctx.stroke();
+    ctx.fillText(String(t), 8, y+4);
+  });
+
+  // Año actual
+  const ahora = new Date();
+  const year = ahora.getFullYear();
+
+  // Mapa por mes (0..11) -> array de glucosas
+  const porMes = Array.from({length:12}, ()=>[]);
+  registros.forEach(r=>{
+    // Espera formato r.fecha = "YYYY-MM-DD"
+    const [Y,Mm] = (r.fecha||"").split("-"); // rápido y robusto
+    if(!Y || !Mm) return;
+    const y = parseInt(Y,10);
+    const m = parseInt(Mm,10)-1;
+    if(y===year && m>=0 && m<12){
+      porMes[m].push(Number(r.glucosa));
+    }
+  });
+
+  // Promedios por mes
+  const proms = porMes.map(arr => promedio(arr)); // null si vacío
+
+  // Etiquetas X: Ene..Dic
+  ctx.save();
+  ctx.fillStyle="#2c3e50";
+  ctx.textAlign="center";
+  for(let i=0;i<12;i++){
+    const x = xToPx(i);
+    ctx.fillText(mesCortoES(i), x, M.t+plotH+20);
+  }
+  ctx.restore();
+
+  // Línea y barras/columnas pequeñas por mes (promedio mensual)
+  // Dibujamos una barra sutil y un punto coloreado por rango
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  let conectado = false;
+
+  for(let i=0;i<12;i++){
+    const avg = proms[i];
+    if(avg!==null){
+      const x = xToPx(i);
+      const y = yToPx(avg);
+
+      // color por rango
+      let fill = "#e74c3c"; // rojo
+      if(avg>=70&&avg<=140) fill="#27ae60";
+      else if((avg>=60&&avg<70)||(avg>=141&&avg<=180)) fill="#f1c40f";
+
+      // barrita vertical suave (para dar idea de valor)
+      const barW = Math.max(6, plotW/120); // ancho mínimo
+      ctx.fillStyle = fill + "55"; // con transparencia
+      ctx.fillRect(x - barW/2, y, barW, (M.t+plotH) - y);
+
+      // punto
+      ctx.beginPath(); ctx.arc(x,y,4,0,Math.PI*2);
+      ctx.fillStyle = fill; ctx.fill();
+
+      // línea conectando meses con dato
+      if(!conectado){ ctx.moveTo(x,y); conectado=true; }
+      else ctx.lineTo(x,y);
+
+      // valor
+      ctx.fillStyle="#34495e";
+      ctx.font="11px Arial";
+      ctx.textAlign="center";
+      ctx.fillText(String(avg), x, y-8);
+    } else {
+      // Mes sin datos: dibuja punto hueco gris claro
+      const x = xToPx(i);
+      const y = yToPx(100); // altura neutra para colocar el círculo hueco
+      ctx.beginPath(); ctx.arc(x,y,3.5,0,Math.PI*2);
+      ctx.strokeStyle="#bdc3c7";
+      ctx.lineWidth=1;
+      ctx.stroke();
+    }
+  }
+  // trazo de la línea de conexión
+  ctx.strokeStyle="#2980b9";
+  ctx.stroke();
+
+  // Si no hubo ningún mes con datos
+  if(!proms.some(v=>v!==null)){
+    ctx.fillStyle="#7f8c8d";
+    ctx.font="14px Arial";
+    ctx.textAlign="center";
+    ctx.fillText(`Sin datos en ${year}`, M.l + plotW/2, M.t + plotH/2);
+  }
+}
+
+// Inicializar UI con fecha/hora sugerida
+(function initDefaults(){
+  if(!fecha.value) fechaHoy();
+  if(!hora.value) horaActual();
+})();
+
+mostrar();
+</script>
+</body>
+</html>
