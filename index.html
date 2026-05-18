@@ -31,6 +31,15 @@
   /* Hacer los canvas fluidos sin perder la relación de aspecto */
   .canvas-wrap{position:relative;width:100%;max-width:900px;margin:0 auto}
   canvas{width:100%;height:auto;display:block}
+  
+  /* ✅ Mejora visual: texto largo (IA/Obs/Comida) se alinea arriba */
+  td{vertical-align:top}
+
+
+/* IA más legible */
+td:nth-child(8){ text-align:left; font-size:12px; line-height:1.25; }
+
+
 </style>
 </head>
 <body>
@@ -89,7 +98,7 @@
 <table>
   <thead>
     <tr>
-      <th>Fecha</th><th>Hora</th><th>Glucosa</th><th>Insulina</th><th>Tipo</th><th>Comida</th><th>Obs.</th><th></th>
+      <th>Fecha</th><th>Hora</th><th>Glucosa</th><th>Insulina</th><th>Tipo</th><th>Comida</th><th>Obs.</th><th>IA</th><th></th>
     </tr>
   </thead>
   <tbody id="tabla"></tbody>
@@ -100,6 +109,70 @@ let registros = JSON.parse(localStorage.getItem("registrosGlucosa")) || [];
 
 function icono(v){ if(v>=70&&v<=140)return"🟢"; if((v>=141&&v<=180)||(v>=60&&v<70))return"🟡"; return"🔴"; }
 function color(v){ if(v>=70&&v<=140)return"verde"; if((v>=141&&v<=180)||(v>=60&&v<70))return"amarillo"; return"rojo"; }
+
+
+// =========================
+// "IA" ligera: comentario + sugerencia (reglas)
+// =========================
+function generarComentarioIA(r){
+  const g = Number(r.glucosa);
+  const comidaTxt = (r.comida || "").toLowerCase().trim();
+  const ins = Number(r.insulina || 0);
+
+  // Detectores simples por palabras (puedes ampliar lista)
+  const tieneAzucar = /(refresco|coca|soda|jug(o|os)|pan|pastel|galleta|dulce|chocolate|postre|helado|azúcar|azucar|don(a|ut)|pay|brownie)/i.test(comidaTxt);
+  const tieneHarina = /(torta|taco|pizza|hamburguesa|pasta|spaghetti|pan|bolillo|concha|tam(al|ales)|arroz|pap(a|as)|harina)/i.test(comidaTxt);
+  const tieneFibra = /(ensalada|verdura|vegetal|brócoli|brocoli|nopal|avena|frijol|lenteja|garbanzo|chia|linaza)/i.test(comidaTxt);
+  const tieneProteina = /(pollo|pescado|atún|atun|huevo|carne|res|cerdo|queso|yogur|yoghurt)/i.test(comidaTxt);
+
+  // Clasificación por glucosa
+  let estado = "";
+  if (g < 60) estado = "muy baja";
+  else if (g < 70) estado = "baja";
+  else if (g <= 140) estado = "en rango";
+  else if (g <= 180) estado = "ligeramente alta";
+  else estado = "alta";
+
+  // Mensaje base
+  let comentario = `Glucosa ${estado} (${g} mg/dL).`;
+
+  // Sugerencias por estado
+  if (g < 60){
+    comentario += " ⚠️ Revisa síntomas. Considera una colación rápida (carbohidrato de acción rápida) y vuelve a medir en 15 min.";
+  } else if (g < 70){
+    comentario += " ⚠️ Un poco baja. Una colación pequeña puede ayudar; vuelve a medir pronto.";
+  } else if (g <= 140){
+    comentario += " ✅ Buen rango. Mantén tu rutina.";
+  } else if (g <= 180){
+    comentario += " 🟡 Un poco alta. Revisa porciones y horarios; considera caminar 10–15 min si te es posible.";
+  } else {
+    comentario += " 🔴 Alta. Hidrátate, revisa qué comiste y mide nuevamente más tarde. Si es frecuente, conviene ajustar hábitos con un profesional.";
+  }
+
+  // Ajustes por comida detectada
+  if (tieneAzucar && g > 140){
+    comentario += " 🍬 Se detecta azúcar/ultraprocesados en la comida: prueba reducir bebidas azucaradas/postres y reemplazar por agua o opciones sin azúcar.";
+  } else if (tieneHarina && g > 140){
+    comentario += " 🍞 Se detecta harina/carbos: intenta porciones más pequeñas o combinar con más proteína y fibra.";
+  } else if (tieneFibra && g > 140){
+    comentario += " 🥗 Buen punto: hay fibra en la comida; suele ayudar a estabilizar. Revisa cantidad total de carbohidratos.";
+  } else if ((tieneProteina || tieneFibra) && g <= 140){
+    comentario += " 💡 Buena combinación (proteína/fibra) para estabilidad.";
+  }
+
+  // Nota por insulina (si hay)
+  if (ins > 0 && g > 180){
+    comentario += " 💉 Ya hubo insulina registrada; observa tendencia y evita correcciones repetidas sin guía médica.";
+  }
+
+  // Si no escribió comida, sugerimos registrar mejor
+  if (!comidaTxt){
+    comentario += " ✍️ Tip: escribe qué comiste (aunque sea breve) para detectar patrones.";
+  }
+
+  return comentario;
+}
+
 
 function fechaHoy(){
   // Ajuste para zona horaria: asegura YYYY-MM-DD correcto
@@ -119,9 +192,9 @@ function mostrar(){
       <td>${r.fecha}</td><td>${r.hora}</td>
       <td class="glucosa">${icono(r.glucosa)} ${r.glucosa}</td>
       <td>${r.insulina||""}</td><td>${r.tipo||""}</td>
-      <td>${r.comida||""}</td><td>${r.obs||""}</td>
-      <td><button class="borrar" onclick="borrar(${i})">X</button></td>
-    </tr>`;
+ <td>${r.comida||""}</td><td>${r.obs||""}</td>
+<td style="text-align:left;font-size:12px;line-height:1.25">${r.ia || generarComentarioIA(r)}</td>
+<td><button class="borrar" onclick="borrar(${i})">X</button></td>`;
   });
   dibujarGraficaSemanal();
   dibujarGraficaPorMeses();
@@ -135,15 +208,20 @@ function borrar(i){
 
 formRegistro.addEventListener("submit",e=>{
   e.preventDefault();
-  registros.push({
-    glucosa: parseInt(glucosa.value,10),
-    fecha: fecha.value,
-    hora: hora.value,
-    insulina: insulina.value,
-    tipo: tipoInsulina.value,
-    comida: comida.value,
-    obs: observaciones.value
-  });
+const nuevo = {
+  glucosa: parseInt(glucosa.value,10),
+  fecha: fecha.value,
+  hora: hora.value,
+  insulina: insulina.value,
+  tipo: tipoInsulina.value,
+  comida: comida.value,
+  obs: observaciones.value
+};
+
+// ✅ Generar comentario IA (basado en glucosa + comida)
+nuevo.ia = generarComentarioIA(nuevo);
+
+registros.push(nuevo);
   localStorage.setItem("registrosGlucosa",JSON.stringify(registros));
   e.target.reset();
   mostrar();
