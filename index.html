@@ -39,6 +39,57 @@
 /* IA más legible */
 td:nth-child(8){ text-align:left; font-size:12px; line-height:1.25; }
 
+/* =========================
+   FECHA: resaltado por múltiples mediciones en el mismo día
+   ========================= */
+.fecha-badge{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:4px 8px;
+  border-radius:999px;
+  font-weight:700;
+  font-size:12px;
+  line-height:1;
+  border:1px solid transparent;
+  white-space:nowrap;
+}
+
+/* 1 medición: sin resaltado extra */
+.fecha-1{
+  background:transparent;
+  border-color:transparent;
+  color:#111827;
+}
+
+/* 2 mediciones */
+.fecha-2{
+  background:#e0f2fe;     /* azul claro */
+  border-color:#7dd3fc;
+  color:#075985;
+}
+
+/* 3-4 mediciones */
+.fecha-3{
+  background:#ede9fe;     /* morado claro */
+  border-color:#c4b5fd;
+  color:#5b21b6;
+}
+
+/* 5+ mediciones */
+.fecha-5{
+  background:#ffedd5;     /* naranja claro */
+  border-color:#fdba74;
+  color:#9a3412;
+}
+
+/* Etiqueta xN */
+.fecha-count{
+  font-weight:800;
+  font-size:11px;
+  opacity:.9;
+}
+
 
 </style>
 </head>
@@ -106,6 +157,25 @@ td:nth-child(8){ text-align:left; font-size:12px; line-height:1.25; }
 
 <script>
 let registros = JSON.parse(localStorage.getItem("registrosGlucosa")) || [];
+
+// =========================
+// Ordena registros por Fecha + Hora
+// =========================
+// order = "desc" -> más nuevo arriba (recomendado)
+// order = "asc"  -> más viejo arriba
+function ordenarRegistros(order = "desc"){
+  const dir = (order === "asc") ? 1 : -1;
+
+  registros.sort((a,b)=>{
+    // Como fecha es "YYYY-MM-DD" y hora "HH:MM", comparar strings funciona bien
+    const aKey = `${a.fecha || "0000-00-00"} ${a.hora || "00:00"}`;
+    const bKey = `${b.fecha || "0000-00-00"} ${b.hora || "00:00"}`;
+
+    if(aKey < bKey) return -1 * dir;
+    if(aKey > bKey) return  1 * dir;
+    return 0;
+  });
+}
 
 function icono(v){ if(v>=70&&v<=140)return"🟢"; if((v>=141&&v<=180)||(v>=60&&v<70))return"🟡"; return"🔴"; }
 function color(v){ if(v>=70&&v<=140)return"verde"; if((v>=141&&v<=180)||(v>=60&&v<70))return"amarillo"; return"rojo"; }
@@ -184,24 +254,93 @@ function horaActual(){
   hora.value = String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");
 }
 
+// =========================
+// Conteo de registros por fecha (YYYY-MM-DD)
+// =========================
+function contarPorFecha(){
+  const counts = {};
+  registros.forEach(r => {
+    const f = r.fecha;
+    if(!f) return;
+    counts[f] = (counts[f] || 0) + 1;
+  });
+  return counts;
+}
+
+// Devuelve la clase CSS según cuántas mediciones hubo ese día
+function claseFechaPorConteo(n){
+  if(n >= 5) return "fecha-5";
+  if(n >= 3) return "fecha-3";
+  if(n >= 2) return "fecha-2";
+  return "fecha-1";
+}
+
+
+// =========================
+// Evita que texto con < > etc. rompa la tabla
+// =========================
+function escapeHtml(str){
+  return String(str ?? "").replace(/[&<>"']/g, m => ({
+    "&":"&amp;",
+    "<":"&lt;",
+    ">":"&gt;",
+    '"':"&quot;",
+    "'":"&#39;"
+  }[m]));
+}
+
+
 function mostrar(){
   const cuerpo = document.getElementById('tabla');
-  cuerpo.innerHTML="";
-  registros.forEach((r,i)=>{
-    cuerpo.innerHTML+=`<tr class="${color(r.glucosa)}">
-      <td>${r.fecha}</td><td>${r.hora}</td>
+  cuerpo.innerHTML = "";
+
+  // ✅ Ordenar registros (más nuevo arriba)
+  ordenarRegistros("desc");
+
+  // ✅ Conteo por fecha (para resaltar días con múltiples mediciones)
+  const counts = contarPorFecha();
+
+  registros.forEach((r, i) => {
+    cuerpo.innerHTML += `<tr class="${color(r.glucosa)}">
+      <td>
+        <span class="fecha-badge ${claseFechaPorConteo(counts[r.fecha] || 1)}">
+          ${r.fecha}
+          ${(counts[r.fecha] || 1) > 1 ? `<span class="fecha-count">(x${counts[r.fecha]})</span>` : ``}
+        </span>
+      </td>
+
+      <td>${r.hora}</td>
+
       <td class="glucosa">${icono(r.glucosa)} ${r.glucosa}</td>
-      <td>${r.insulina||""}</td><td>${r.tipo||""}</td>
- <td>${r.comida||""}</td><td>${r.obs||""}</td>
-<td style="text-align:left;font-size:12px;line-height:1.25">${r.ia || generarComentarioIA(r)}</td>
-<td><button class="borrar" onclick="borrar(${i})">X</button></td>`;
+
+      <td>${r.insulina || ""}</td>
+
+      <td>${r.tipo || ""}</td>
+
+      <td>${escapeHtml(r.comida || "")}</td>
+
+      <td>${escapeHtml(r.obs || "")}</td>
+
+      <td style="text-align:left;font-size:12px;line-height:1.25">
+        ${escapeHtml(r.ia || generarComentarioIA(r))}
+      </td>
+
+      <td>
+        <button class="borrar" onclick="borrar(${i})">X</button>
+      </td>
+    </tr>`;
   });
+
   dibujarGraficaSemanal();
   dibujarGraficaPorMeses();
 }
 
 function borrar(i){
   registros.splice(i,1);
+
+  // ✅ Re-ordenar tras eliminar (mantener consistencia)
+  ordenarRegistros("desc");
+
   localStorage.setItem("registrosGlucosa",JSON.stringify(registros));
   mostrar();
 }
@@ -222,9 +361,13 @@ const nuevo = {
 nuevo.ia = generarComentarioIA(nuevo);
 
 registros.push(nuevo);
-  localStorage.setItem("registrosGlucosa",JSON.stringify(registros));
-  e.target.reset();
-  mostrar();
+
+// ✅ Ordenar antes de guardar (para que quede ordenado en localStorage)
+ordenarRegistros("desc");
+
+localStorage.setItem("registrosGlucosa",JSON.stringify(registros));
+e.target.reset();
+mostrar();
 });
 
 // ---------- Abreviaciones de día y mes en español ----------
