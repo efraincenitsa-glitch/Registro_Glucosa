@@ -10,21 +10,33 @@
 <style>
   body{font-family:Arial, system-ui, -apple-system;background:#f4f6f8;padding:12px}
   h1{text-align:center}
-  form,table,.card{background:#fff;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.1)}
+  form,.card{background:#fff;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.1)}
   form{padding:12px;margin-bottom:20px}
   label{font-weight:bold;font-size:14px;margin-top:8px;display:block}
   input,select,textarea{width:100%;padding:6px;font-size:14px;border-radius:6px;border:1px solid #ccc;margin-top:4px}
   textarea{resize:none}
   button{width:100%;background:#3498db;color:#fff;font-size:16px;padding:10px;border:none;border-radius:8px;margin-top:10px;cursor:pointer}
   .btnFecha{background:#2ecc71;font-size:13px}
-  table{
+.tabla-wrap{
   width:100%;
+  overflow-x:auto;              /* ✅ scroll horizontal en móvil */
+  -webkit-overflow-scrolling:touch;
+  margin-top:8px;
+}
+
+.tabla-registros{
+  width:max-content;            /* ✅ la tabla puede crecer */
+  min-width:100%;               /* ✅ pero no se hace más chica que el contenedor */
   border-collapse:collapse;
   font-size:13px;
-  overflow:hidden;
-  table-layout:fixed;
+  background:#fff;
 }
-  th,td{padding:8px;text-align:center;border-bottom:1px solid #ddd}
+  th,td{
+  padding:8px;
+  text-align:center;
+  border-bottom:1px solid #ddd;
+  white-space:nowrap;   /* ✅ evita que el encabezado se encime */
+}
   th{background:#ecf0f1}
   .verde{background:#d4edda}.amarillo{background:#fff3cd}.rojo{background:#f8d7da}
   .glucosa{font-size:20px;font-weight:bold}
@@ -50,13 +62,27 @@ td:nth-child(8){
 .td-ia{
   text-align:left;
   font-size:10px;
-  line-height:1;
+  line-height:1.1;
   white-space:nowrap;        /* una sola línea */
-  overflow:hidden;           /* oculta exceso */
-  text-overflow:ellipsis;    /* muestra ... */
-  max-width:90px;            /* ancho delgado (ajústalo si quieres) */
-  width:90px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  min-width:140px;           /* ✅ más espacio real */
+  max-width:140px;
+  width:140px;
 }
+
+
+/* ✅ Anchos mínimos por columna */
+.col-fecha{min-width:90px;}
+.col-hora{min-width:55px;}
+.col-glucosa{min-width:70px;}
+.col-insulina{min-width:65px;}
+.col-tipo{min-width:95px;}
+.col-comida{min-width:110px;}
+.col-obs{min-width:90px;}
+.col-ia{min-width:140px;}
+.col-accion{min-width:45px;}
+
 
 /* =========================
    FECHA: resaltado por múltiples mediciones en el mismo día
@@ -107,6 +133,32 @@ td:nth-child(8){
   font-weight:800;
   font-size:11px;
   opacity:.9;
+}
+
+
+@media (max-width: 600px){
+  body{
+    padding:8px;
+  }
+
+  .tabla-registros{
+    font-size:12px;
+  }
+
+  th,td{
+    padding:6px;
+  }
+
+  .glucosa{
+    font-size:18px;
+  }
+
+  .td-ia{
+    font-size:10px;
+    min-width:130px;
+    max-width:130px;
+    width:130px;
+  }
 }
 
 
@@ -166,14 +218,24 @@ td:nth-child(8){
   </div>
 </div>
 
-<table>
-  <thead>
-    <tr>
-      <th>Fecha</th><th>Hora</th><th>Glucosa</th><th>Insulina</th><th>Tipo</th><th>Comida</th><th>Obs.</th><th>IA</th><th></th>
-    </tr>
-  </thead>
-  <tbody id="tabla"></tbody>
-</table>
+<div class="tabla-wrap">
+  <table class="tabla-registros">
+    <thead>
+      <tr>
+        <th class="col-fecha">Fecha</th>
+        <th class="col-hora">Hora</th>
+        <th class="col-glucosa">Glucosa</th>
+        <th class="col-insulina">Insulina</th>
+        <th class="col-tipo">Tipo</th>
+        <th class="col-comida">Comida</th>
+        <th class="col-obs">Obs.</th>
+        <th class="col-ia">IA</th>
+        <th class="col-accion"></th>
+      </tr>
+    </thead>
+    <tbody id="tabla"></tbody>
+  </table>
+</div>
 
 <script>
 let registros = JSON.parse(localStorage.getItem("registrosGlucosa")) || [];
