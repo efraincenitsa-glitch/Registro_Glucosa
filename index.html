@@ -521,6 +521,24 @@ function escapeHtml(str){
   }[m]));
 }
 
+// ✅ Resume el comentario IA para mostrarlo en una sola línea en móvil
+function resumirComentarioIA(texto, maxLen = 55){
+  const limpio = String(texto || "")
+    .replace(/\s+/g, " ")   // quita saltos raros y espacios dobles
+    .trim();
+
+  if (limpio.length <= maxLen) return limpio;
+
+  // cortar sin partir palabra a la mitad
+  let recorte = limpio.slice(0, maxLen);
+
+  const ultimoEspacio = recorte.lastIndexOf(" ");
+  if (ultimoEspacio > 20) {
+    recorte = recorte.slice(0, ultimoEspacio);
+  }
+
+  return recorte + "...";
+}
 
 function mostrar(){
   const cuerpo = document.getElementById('tabla');
@@ -554,9 +572,11 @@ function mostrar(){
       <td>${escapeHtml(r.obs || "")}</td>
 
 
-     <td class="td-ia" title="${escapeHtml(generarComentarioIA(r))}">
-       ${escapeHtml(generarComentarioIA(r))}
-     </td>
+
+      <td class="td-ia" title="${escapeHtml(generarComentarioIA(r))}">
+        ${escapeHtml(resumirComentarioIA(generarComentarioIA(r), 55))}
+      </td>
+
 
 
       <td>
