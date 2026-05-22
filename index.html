@@ -103,14 +103,15 @@ td:nth-child(8){ text-align:left; font-size:12px; line-height:1.25; }
   <label>Hora</label><input type="time" id="hora" required>
   <button type="button" class="btnFecha" onclick="horaActual()">Usar hora actual</button>
   <label>Dosis de insulina (UI)</label><input type="number" id="insulina" step="0.1">
-  <label>Tipo de insulina</label>
-  <select id="tipoInsulina">
-    <option value="">-- Seleccionar --</option>
-    <option>Rápida</option>
-    <option>Intermedia</option>
-    <option>Lenta</option>
-    <option>Mixta</option>
-  </select>
+<label>Tipo de tratamiento</label>
+<select id="tipoInsulina">
+  <option value="">-- Seleccionar --</option>
+  <option>Rápida/Humana</option>
+  <option>Intermedia</option>
+  <option>Lenta/Glargina</option>
+  <option>Mixta</option>
+  <option>Dapagliflozina (oral)</option>
+</select>
   <label>¿Qué comiste?</label><textarea id="comida" rows="2"></textarea>
   <label>Observaciones</label><textarea id="observaciones" rows="2"></textarea>
   <button type="submit">Guardar registro</button>
@@ -158,6 +159,36 @@ td:nth-child(8){ text-align:left; font-size:12px; line-height:1.25; }
 <script>
 let registros = JSON.parse(localStorage.getItem("registrosGlucosa")) || [];
 
+
+// ✅ Normalizar registros antiguos: cambiar "Lenta" por "Lenta/Glargina"
+// ✅ y "Rápida" por "Rápida/Humana"
+
+let huboCambios = false;
+
+registros = registros.map(r => {
+  let nuevoTipo = r.tipo;
+
+  if (nuevoTipo === "Lenta") {
+    nuevoTipo = "Lenta/Glargina";
+  }
+
+  if (nuevoTipo === "Rápida") {
+    nuevoTipo = "Rápida/Humana";
+  }
+
+  if (nuevoTipo !== r.tipo) {
+    huboCambios = true;
+    return { ...r, tipo: nuevoTipo };
+  }
+
+  return r;
+});
+
+
+if (huboCambios) {
+  localStorage.setItem("registrosGlucosa", JSON.stringify(registros));
+}
+
 // =========================
 // Ordena registros por Fecha + Hora
 // =========================
@@ -187,13 +218,42 @@ function color(v){ if(v>=70&&v<=140)return"verde"; if((v>=141&&v<=180)||(v>=60&&
 function generarComentarioIA(r){
   const g = Number(r.glucosa);
   const comidaTxt = (r.comida || "").toLowerCase().trim();
+  const obsTxt = (r.obs || "").toLowerCase().trim();
   const ins = Number(r.insulina || 0);
+  const tipoTxt = (r.tipo || "").toLowerCase().trim();
+  const horaTxt = (r.hora || "").trim();
 
-  // Detectores simples por palabras (puedes ampliar lista)
-  const tieneAzucar = /(refresco|coca|soda|jug(o|os)|pan|pastel|galleta|dulce|chocolate|postre|helado|azúcar|azucar|don(a|ut)|pay|brownie)/i.test(comidaTxt);
-  const tieneHarina = /(torta|taco|pizza|hamburguesa|pasta|spaghetti|pan|bolillo|concha|tam(al|ales)|arroz|pap(a|as)|harina)/i.test(comidaTxt);
+  // Detectores simples por palabras
+  const tieneAzucar = /(refresco|coca|soda|jugo|jugos|pan dulce|pastel|galleta|dulce|chocolate|postre|helado|azúcar|azucar|dona|donut|pay|brownie)/i.test(comidaTxt);
+  const tieneHarina = /(torta|taco|pizza|hamburguesa|pasta|spaghetti|pan|bolillo|concha|tamal|tamales|arroz|papa|papas|harina)/i.test(comidaTxt);
   const tieneFibra = /(ensalada|verdura|vegetal|brócoli|brocoli|nopal|avena|frijol|lenteja|garbanzo|chia|linaza)/i.test(comidaTxt);
   const tieneProteina = /(pollo|pescado|atún|atun|huevo|carne|res|cerdo|queso|yogur|yoghurt)/i.test(comidaTxt);
+  const comidaVacia = !comidaTxt;
+
+  // Detectores de observaciones
+  const hizoEjercicio = /(caminar|caminata|ejercicio|gym|gimnasio|entrenamiento|bicicleta|correr|corrí|corrio)/i.test(obsTxt);
+  const malDormir = /(desvelo|poco sueño|poco sueno|insomnio|dormí mal|dormi mal|sin dormir)/i.test(obsTxt);
+  const estres = /(estrés|estres|ansiedad|nervios|presión|presion)/i.test(obsTxt);
+  const sintomas = /(mareo|temblor|sudor|debilidad|visión borrosa|vision borrosa|hambre intensa)/i.test(obsTxt);
+
+  // Detectar tratamiento/tipo seleccionado
+  const usaDapagliflozina = /dapagliflozina/.test(tipoTxt);
+  const usaInsulinaRapida = /rápida/.test(tipoTxt);
+  const usaInsulinaIntermedia = /intermedia/.test(tipoTxt);
+  const usaInsulinaLenta = /lenta|glargina/.test(tipoTxt);
+  const usaMixta = /mixta/.test(tipoTxt);
+  const usaInsulina = /rápida|intermedia|lenta|glargina|mixta/.test(tipoTxt);
+
+  // Hora
+  let horaNum = null;
+  if (horaTxt.includes(":")){
+    const [hh, mm] = horaTxt.split(":").map(Number);
+    if (!isNaN(hh) && !isNaN(mm)) horaNum = hh + (mm / 60);
+  }
+
+  const esMadrugada = horaNum !== null && horaNum < 6;
+  const esAyunoTemprano = horaNum !== null && horaNum >= 6 && horaNum < 9;
+  const esNoche = horaNum !== null && horaNum >= 21;
 
   // Clasificación por glucosa
   let estado = "";
@@ -206,42 +266,133 @@ function generarComentarioIA(r){
   // Mensaje base
   let comentario = `Glucosa ${estado} (${g} mg/dL).`;
 
-  // Sugerencias por estado
+  // Acumulador de comentarios adicionales
+  const extras = [];
+
+  // 1-5 Comentarios por rango de glucosa
   if (g < 60){
-    comentario += " ⚠️ Revisa síntomas. Considera una colación rápida (carbohidrato de acción rápida) y vuelve a medir en 15 min.";
+    extras.push("⚠️ Valor muy bajo: conviene revisar síntomas y repetir la medición pronto.");
+    extras.push("🕒 Un seguimiento cercano ayuda a confirmar si fue un evento aislado o una tendencia.");
+    if (sintomas) extras.push("📌 Además registraste síntomas compatibles; conviene dejarlo muy bien documentado.");
   } else if (g < 70){
-    comentario += " ⚠️ Un poco baja. Una colación pequeña puede ayudar; vuelve a medir pronto.";
+    extras.push("⚠️ Está un poco baja; conviene observar cómo evoluciona en la siguiente medición.");
+    extras.push("🍽️ Registrar qué comiste antes puede ayudarte a entender mejor este resultado.");
   } else if (g <= 140){
-    comentario += " ✅ Buen rango. Mantén tu rutina.";
+    extras.push("✅ Se encuentra en un rango favorable para seguimiento.");
+    extras.push("📊 Este tipo de registro ayuda a detectar patrones estables a lo largo de la semana.");
   } else if (g <= 180){
-    comentario += " 🟡 Un poco alta. Revisa porciones y horarios; considera caminar 10–15 min si te es posible.";
+    extras.push("🟡 Está algo elevada; conviene observar porciones, horarios y tendencia.");
+    extras.push("📈 Un valor aislado no siempre define un problema, pero sí sirve para comparar con registros siguientes.");
   } else {
-    comentario += " 🔴 Alta. Hidrátate, revisa qué comiste y mide nuevamente más tarde. Si es frecuente, conviene ajustar hábitos con un profesional.";
+    extras.push("🔴 Quedó alta; conviene vigilar tendencia, hidratación y contexto del día.");
+    extras.push("📌 Si este patrón se repite en varios registros, vale la pena revisarlo con un profesional de salud.");
   }
 
-  // Ajustes por comida detectada
+  // 6-10 Comentarios por comida
   if (tieneAzucar && g > 140){
-    comentario += " 🍬 Se detecta azúcar/ultraprocesados en la comida: prueba reducir bebidas azucaradas/postres y reemplazar por agua o opciones sin azúcar.";
-  } else if (tieneHarina && g > 140){
-    comentario += " 🍞 Se detecta harina/carbos: intenta porciones más pequeñas o combinar con más proteína y fibra.";
-  } else if (tieneFibra && g > 140){
-    comentario += " 🥗 Buen punto: hay fibra en la comida; suele ayudar a estabilizar. Revisa cantidad total de carbohidratos.";
-  } else if ((tieneProteina || tieneFibra) && g <= 140){
-    comentario += " 💡 Buena combinación (proteína/fibra) para estabilidad.";
+    extras.push("🍬 Se detectan azúcares o ultraprocesados en la comida registrada.");
+    extras.push("🥤 Puede ser útil comparar estos registros con otros días sin bebidas azucaradas.");
   }
 
-  // Nota por insulina (si hay)
-  if (ins > 0 && g > 180){
-    comentario += " 💉 Ya hubo insulina registrada; observa tendencia y evita correcciones repetidas sin guía médica.";
+  if (tieneHarina && g > 140){
+    extras.push("🍞 La presencia de harinas o carbohidratos concentrados puede influir en la variación del resultado.");
   }
 
-  // Si no escribió comida, sugerimos registrar mejor
-  if (!comidaTxt){
-    comentario += " ✍️ Tip: escribe qué comiste (aunque sea breve) para detectar patrones.";
+  if (tieneFibra){
+    extras.push("🥗 La fibra registrada suele ayudar a que la respuesta de la comida sea más gradual.");
   }
+
+  if (tieneProteina){
+    extras.push("🍗 La presencia de proteína puede aportar más saciedad y mejor equilibrio en la comida.");
+  }
+
+  if (!tieneFibra && !comidaVacia && g > 140){
+    extras.push("📎 Si agregas verduras o fibra en comidas similares, luego podrás comparar si cambia el patrón.");
+  }
+
+  // 11-15 Comentarios por tratamiento
+  if (usaInsulinaRapida){
+    extras.push("💉 Se registró insulina Rápida/Humana; es útil compararla con la hora y el tipo de comida.");
+
+  }
+
+  if (usaInsulinaIntermedia){
+    extras.push("💉 Se registró insulina intermedia; observar tendencias por varias horas puede dar más contexto.");
+  }
+
+  if (usaInsulinaLenta){
+    extras.push("💉 Se registró Lenta/Glargina; suele ser útil revisar el comportamiento general del día.");
+  }
+
+  if (usaMixta){
+    extras.push("💉 Se registró insulina mixta; conviene comparar resultados con horario y alimentos del registro.");
+  }
+
+  if (usaInsulina && ins > 0){
+    extras.push(`🧾 Quedó registrada una dosis de ${ins} UI junto con este valor.`);
+  }
+
+  if (usaInsulina && ins > 0 && g > 180){
+    extras.push("📌 Con insulina registrada y glucosa alta, observar la tendencia puede ser más útil que sacar conclusiones con un solo dato.");
+  }
+
+  if (usaDapagliflozina){
+    extras.push("💊 Se registró Dapagliflozina (oral).");
+    extras.push("💧 Con este tratamiento, mantener buena hidratación y seguimiento ordenado suele ser buena práctica.");
+    if (g <= 140){
+      extras.push("✅ Este registro sugiere buen control en el contexto del tratamiento anotado.");
+    } else if (g > 180){
+      extras.push("📌 Aunque hay tratamiento oral registrado, este valor salió alto; conviene observar si es algo aislado o repetido.");
+    }
+  }
+
+  // 16-20 Comentarios por hora
+  if (esMadrugada){
+    extras.push("🌙 La medición fue en madrugada; puede ser útil compararla con otras del mismo horario.");
+  }
+
+  if (esAyunoTemprano){
+    extras.push("🌅 Parece una medición temprana; estos registros ayudan a comparar mejor el comportamiento matutino.");
+  }
+
+  if (esNoche){
+    extras.push("🌙 Al ser una medición nocturna, puede servir revisar qué pasó en cena y colaciones previas.");
+  }
+
+  // 21-25 Comentarios por observaciones
+  if (hizoEjercicio){
+    extras.push("🚶 Se registró actividad física; eso puede influir en el comportamiento de la glucosa.");
+  }
+
+  if (malDormir){
+    extras.push("😴 El descanso irregular también puede influir en cómo se comportan algunos registros.");
+  }
+
+  if (estres){
+    extras.push("🧠 Estrés o ansiedad registrados pueden aportar contexto al resultado.");
+  }
+
+  if (sintomas){
+    extras.push("🩺 Registrar síntomas junto al valor ayuda mucho a interpretar mejor cada evento.");
+  }
+
+  // Comentario si no hay comida registrada
+  if (comidaVacia){
+    extras.push("✍️ Tip: escribe qué comiste (aunque sea breve) para detectar patrones.");
+  }
+
+  // Extra general útil
+  extras.push("📚 Entre más consistentes sean tus registros, más fácil será comparar tendencias por día, semana o mes.");
+
+  // Evitar repetir idénticos y limitar cantidad mostrada
+  const extrasUnicos = [...new Set(extras)];
+
+  // Puedes cambiar 5 por 8 o 10 si quieres mostrar todavía más
+  comentario += " " + extrasUnicos.slice(0, 8).join(" ");
 
   return comentario;
 }
+
 
 
 function fechaHoy(){
@@ -321,9 +472,11 @@ function mostrar(){
 
       <td>${escapeHtml(r.obs || "")}</td>
 
+
       <td style="text-align:left;font-size:12px;line-height:1.25">
-        ${escapeHtml(r.ia || generarComentarioIA(r))}
+        ${escapeHtml(generarComentarioIA(r))}
       </td>
+
 
       <td>
         <button class="borrar" onclick="borrar(${i})">X</button>
