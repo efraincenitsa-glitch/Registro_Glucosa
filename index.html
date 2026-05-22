@@ -17,7 +17,13 @@
   textarea{resize:none}
   button{width:100%;background:#3498db;color:#fff;font-size:16px;padding:10px;border:none;border-radius:8px;margin-top:10px;cursor:pointer}
   .btnFecha{background:#2ecc71;font-size:13px}
-  table{width:100%;border-collapse:collapse;font-size:13px;overflow:hidden}
+  table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:13px;
+  overflow:hidden;
+  table-layout:fixed;
+}
   th,td{padding:8px;text-align:center;border-bottom:1px solid #ddd}
   th{background:#ecf0f1}
   .verde{background:#d4edda}.amarillo{background:#fff3cd}.rojo{background:#f8d7da}
@@ -37,7 +43,20 @@
 
 
 /* IA más legible */
-td:nth-child(8){ text-align:left; font-size:12px; line-height:1.25; }
+td:nth-child(8){
+  text-align:left;
+}
+/* ✅ Columna IA en una sola línea delgada */
+.td-ia{
+  text-align:left;
+  font-size:10px;
+  line-height:1;
+  white-space:nowrap;        /* una sola línea */
+  overflow:hidden;           /* oculta exceso */
+  text-overflow:ellipsis;    /* muestra ... */
+  max-width:90px;            /* ancho delgado (ajústalo si quieres) */
+  width:90px;
+}
 
 /* =========================
    FECHA: resaltado por múltiples mediciones en el mismo día
@@ -473,9 +492,9 @@ function mostrar(){
       <td>${escapeHtml(r.obs || "")}</td>
 
 
-      <td style="text-align:left;font-size:12px;line-height:1.25">
-        ${escapeHtml(generarComentarioIA(r))}
-      </td>
+     <td class="td-ia" title="${escapeHtml(generarComentarioIA(r))}">
+       ${escapeHtml(generarComentarioIA(r))}
+     </td>
 
 
       <td>
